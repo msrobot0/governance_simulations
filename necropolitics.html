@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Necropolitical Network — Pure Canvas 2D (No Libraries)</title>
+  <style>
+    :root{--bg0:#0b0f17;--bg1:#0f1726;--ink:#e9eefb;--muted:#90a0c0}
+    html,body{margin:0;height:100%;background:radial-gradient(1200px 800px at 20% 0%,var(--bg1),var(--bg0));color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,'Helvetica Neue',Arial}
+    .wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto}
+    header{padding:16px 20px;display:flex;align-items:baseline;gap:12px}
+    h1{font-size:20px;letter-spacing:.8px;margin:0;font-weight:700}
+    .sub{color:var(--muted);font-size:13px}
+    footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;color:var(--muted);font-size:12px;backdrop-filter:blur(8px);background:linear-gradient(0deg,rgba(11,15,23,.75),rgba(11,15,23,0))}
+    #stage{position:relative}
+    #cv{display:block;width:100%;height:100%}
+    .tooltip{position:absolute;padding:8px 10px;background:#111827cc;color:#e5e7eb;border:1px solid #1f2937;border-radius:8px;font-size:12px;pointer-events:none;transform:translate(-50%,-120%);white-space:nowrap;backdrop-filter:blur(4px);z-index:10}
+    .panel{position:fixed;right:16px;top:72px;display:grid;gap:8px;background:#0b1220cc;border:1px solid #1f2937;border-radius:12px;padding:12px 14px;min-width:280px;z-index:20}
+    .panel h2{margin:0 0 6px 0;font-size:12px;color:#cdd6f4;letter-spacing:.08em;text-transform:uppercase}
+    .row{display:grid;grid-template-columns:140px 1fr;align-items:center;gap:10px;font-size:12px;color:#cfd7ee}
+    .row input[type="range"], .row input[type="number"]{width:120px}
+    .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+    button{background:#101a33;color:#dbe4ff;border:1px solid #26324b;border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer}
+    button:hover{filter:brightness(1.1)}
+    .diag{position:fixed;left:12px;bottom:12px;background:#0b1220cc;color:#d7e0f4;border:1px solid #1f2937;border-radius:10px;padding:8px 12px;font-size:12px;max-width:56ch;z-index:20}
+    .pass{color:#86efac}.fail{color:#fca5a5}
+    /* Help overlay */
+    .help{position:fixed;inset:0;background:rgba(8,12,20,.78);backdrop-filter:blur(6px);display:none;z-index:30;color:#dbe4ff}
+    .help .inner{max-width:820px;margin:8vh auto;padding:20px;border:1px solid #23314f;border-radius:16px;background:rgba(12,16,26,.8)}
+    .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px}
+    .legend .item{display:flex;align-items:center;gap:8px;background:#0f1a33;border:1px solid #23314f;border-radius:10px;padding:6px 10px}
+    .chip{width:14px;height:14px;border-radius:50%}
+    .chip.blue{background:#8ecbff}.chip.gray{background:#c0cad8}.chip.green{background:#7effc3}.chip.red{background:#ff6b6b}
+  </style>
+</head>
+<body>
+  <div>
+  <div class="wrap">
+    <header>
+      <h1>Necropolitical Network</h1>
+      <div class="sub">Click = <b>care</b>, ⇧click = <b>policing</b>, drag nodes. R = reseed.</div>
+    </header>
+    <main id="stage">
+      <canvas id="cv"></canvas>
+      <div class="tooltip" id="tip" style="display:none"></div>
+    </main>
+    <footer>
+      <div id="counters">—</div>
+      <div>Hover nodes for details</div>
+    </footer>
+  </div>
+
+  <div class="panel" id="controls">
+    <h2>Controls</h2>
+    <div class="row"><label>Population</label><input id="pop" type="range" min="8" max="200" step="1" value="100"></div>
+    <div class="row"><label>Bias: Racialization</label><input id="biasR" type="range" min="0" max="1" step="0.01" value="0.35"></div>
+    <div class="row"><label>Policing Intensity</label><input id="policeI" type="range" min="0" max="1" step="0.01" value="0.5"></div>
+    <div class="row"><label>Death Threshold</label><input id="deathT" type="range" min="0.05" max="0.7" step="0.01" value="0.3"></div>
+    <div class="row"><label>Repulsion</label><input id="repul" type="range" min="50" max="5000" step="10" value="1800"></div>
+    <div class="row"><label>Spring</label><input id="spring" type="range" min="0.005" max="0.08" step="0.001" value="0.02"></div>
+    <div class="row"><label>Friction</label><input id="fric" type="range" min="0.7" max="0.98" step="0.005" value="0.9"></div>
+    <div class="row"><label>Glow Strength</label><input id="glow" type="range" min="0" max="1.5" step="0.01" value="1.2"></div>
+    <div class="btns">
+      <button id="btnReseed">Reseed</button>
+      <button id="btnWitness">Witness Mode</button>
+      <button id="btnClearCare">Clear Pulses</button>
+      <button id="btnPresets">Presets</button>
+      <button id="btnHelp">What am I seeing?</button>
+    </div>
+  </div>
+
+  <div class="help" id="help">
+    <div class="inner">
+      <h2 style="margin:0 0 8px 0">What this does</h2>
+      <p style="margin:0 0 8px 0;line-height:1.5">
+        This is a <b>visual metaphor</b> inspired by Mbembe’s <i>Necropolitics</i>. Each circle is a <b>subject</b> with attributes (wealth, surveillance, health, racialization). The network layout represents
+        <b>relations</b>. A node’s <b>survival score</b> (<i>who gets to live</i>) is computed from those attributes and the global policy sliders.
+      </p>
+      <p style="margin:0 0 8px 0;line-height:1.5">
+        • <b>Blue glow</b> → relatively safe.  • <b>Gray glow</b> + <b>skull</b> → rendered expendable (below threshold).<br>
+        • <span class="chip green"></span> Click → <b>Care</b> pulse (local health↑, surveillance↓).  • <span class="chip red"></span> ⇧Click → <b>Policing</b> shockwave (surveillance↑, health↓).<br>
+        • Sliders adjust systemic parameters (e.g., policing intensity globally increases red pressure every frame).
+      </p>
+      <div class="legend">
+        <div class="item"><span class="chip blue"></span> Higher survival</div>
+        <div class="item"><span class="chip gray"></span> Lower survival</div>
+        <div class="item"><span class="chip green"></span> Care pulse</div>
+        <div class="item"><span class="chip red"></span> Policing shockwave</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="helpClose">Close</button>
+        <button id="presetAbolition">Preset: Abolition</button>
+        <button id="presetSecurity">Preset: Security State</button>
+        <button id="presetAusterity">Preset: Austerity</button>
+        <button id="presetDataColony">Preset: Datafied Colony</button>
+        <button id="presetPlatformMonarchy">Preset: Platform Monarchy</button>
+        <button id="presetAlgoWelfare">Preset: Algorithmic Welfare</button>
+        <button id="presetCloudCommune">Preset: Post-Work Cloud Commune</button>
+        <button id="presetGeofence">Preset: Psycho-Geofenced State</button>
+        <button id="presetNeofeudal">Preset: Extractive Neofeudalism</button>
+        <button id="presetLiberation">Preset: Black Sky Liberation</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="diag" id="diag">Diagnostics: <span class="pass">✔</span> Pure 2D path</div>
+
+  <script>
+    // ===== Utilities =====
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    function clamp(v,min,max){ return v<min?min:v>max?max:v; }
+    function lerp(a,b,t){ return a+(b-a)*t; }
+    function seededRandom(seed){ let s=seed>>>0; return ()=>((s=(s*1664525+1013904223)>>>0)/4294967296); }
+    function skewed(rand, skew){ return Math.pow(rand(), Math.max(0.01, 1+4*skew)); }
+
+    // ===== Icons =====
+    function drawSkull(ctx, x, y, size, pulse=0, tint=0){
+      // tint in [0,1] mixes toward red when policing pressure is present; pulse animates scale/alpha
+      const r = size/2 * (1 + 0.1*Math.sin(pulse));
+      ctx.save();
+      ctx.translate(x, y);
+      const red = Math.round(245 + 10*tint);
+      const green = Math.round(246 - 80*tint);
+      const blue = Math.round(255 - 120*tint);
+      ctx.globalAlpha = 0.9 - 0.2*Math.abs(Math.sin(pulse*0.5));
+      // head
+      ctx.fillStyle = `rgba(${red},${green},${blue},1)`;
+      ctx.strokeStyle = 'rgba(30,35,55,0.85)';
+      ctx.lineWidth = Math.max(1, size*0.05);
+      ctx.beginPath(); ctx.arc(0, 0, r*0.72, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      // eyes
+      ctx.fillStyle = 'rgba(30,35,55,0.95)';
+      ctx.beginPath(); ctx.arc(-r*0.25, -r*0.1, r*0.12, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc( r*0.25, -r*0.1, r*0.12, 0, Math.PI*2); ctx.fill();
+      // nose
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-r*0.08, r*0.16); ctx.lineTo(r*0.08, r*0.16); ctx.closePath(); ctx.fill();
+      // jaw/teeth
+      ctx.strokeStyle = 'rgba(30,35,55,0.85)'; ctx.lineWidth = Math.max(1, size*0.04);
+      ctx.beginPath(); ctx.moveTo(-r*0.38, r*0.35); ctx.lineTo(r*0.38, r*0.35); ctx.stroke();
+      const t = 4; for(let i=1;i<t;i++){ const tx = -r*0.38 + (i/t)*r*0.76; ctx.beginPath(); ctx.moveTo(tx, r*0.28); ctx.lineTo(tx, r*0.42); ctx.stroke(); }
+      ctx.restore();
+    }
+
+    // ===== Params & State =====
+    const Params = { population: 100, biasRacialization: 0.35, policingIntensity: 0.5, deathThreshold: 0.30, friction: 0.90, repulsion: 1800, spring: 0.02, connectProb: 0.03, glow: 1.2, witness: false };
+    let nodes=[], edges=[], dragging=-1, tipEl, lastSeed=42, rafId=null;
+    let ripples=[]; // dramatic pulses/shockwaves
+
+    // ===== Model =====
+    class Node { constructor(i,rand,w,h){ this.id=i; this.x=rand()*w; this.y=rand()*h; this.vx=(rand()-0.5)*2; this.vy=(rand()-0.5)*2; this.wealth=skewed(rand,0.55); this.racialized=rand()<0.38; this.surveillance=0.25+0.75*skewed(rand,0.7); this.health=0.15+0.75*rand(); this.care=0; this.police=0; this.score=0; this.size=8+14*Math.pow(this.wealth,0.6); this.isolated=false; }
+      compute(){ let s=0.55*this.wealth+0.45*this.health; s -= Params.biasRacialization*(this.racialized?(0.25+0.75*this.surveillance):0.0); s -= 0.6*this.police; this.score=clamp(s,0,1); this.isolated = (this.score < Params.deathThreshold); }
+    }
+    class Edge { constructor(a,b,w=1){ this.a=a; this.b=b; this.w=w; } }
+
+    function build(seed){ lastSeed=seed; const rand=seededRandom(seed); nodes=[]; edges=[]; const {width:w,height:h}=cv; for(let i=0;i<Params.population;i++) nodes.push(new Node(i,rand,w,h)); for(let i=0;i<nodes.length;i++){ for(let j=i+1;j<nodes.length;j++){ if(rand()<Params.connectProb) edges.push(new Edge(i,j,0.6+0.8*rand())); } } }
+
+    function forces(){ const nL=nodes.length; for(let i=0;i<nL;i++){ const n1=nodes[i]; for(let j=i+1;j<nL;j++){ const n2=nodes[j]; let dx=n1.x-n2.x, dy=n1.y-n2.y; let d2=dx*dx+dy*dy+0.01; let f=Params.repulsion/d2; let fx=f*dx, fy=f*dy; n1.vx+=fx; n1.vy+=fy; n2.vx-=fx; n2.vy-=fy; } }
+      for(const e of edges){ const a=nodes[e.a], b=nodes[e.b]; let dx=b.x-a.x, dy=b.y-a.y; let dist=Math.hypot(dx,dy)+0.001; let target=60+140*(1-0.5*(a.wealth+b.wealth)); let k=Params.spring*e.w; let f=k*(dist-target); let fx=(dx/dist)*f, fy=(dy/dist)*f; a.vx+=fx; a.vy+=fy; b.vx-=fx; b.vy-=fy; }
+      const pad=40, w=cv.width, h=cv.height; for(const n of nodes){ n.vx*=Params.friction; n.vy*=Params.friction; n.x+=n.vx; n.y+=n.vy; if(n.x<pad) n.vx+=(pad-n.x)*0.02; if(n.x>w-pad) n.vx-=(n.x-(w-pad))*0.02; if(n.y<pad) n.vy+=(pad-n.y)*0.02; if(n.y>h-pad) n.vy-=(n.y-(h-pad))*0.02; } }
+
+    // ===== Rendering (2D Canvas) =====
+    const cv=document.getElementById('cv'); const ctx=cv.getContext('2d'); tipEl=document.getElementById('tip');
+    const countersEl=document.getElementById('counters');
+    function resize(){ const w=stage.clientWidth, h=stage.clientHeight; cv.width=Math.max(1,Math.floor(w*dpr)); cv.height=Math.max(1,Math.floor(h*dpr)); cv.style.width=w+'px'; cv.style.height=h+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
+
+    function draw(){
+      // update model
+      for(const n of nodes){ n.care*=0.96; n.police*=0.96; n.police += 0.0015*Params.policingIntensity; n.compute(); }
+      // ripple physics & local effects
+      for(let i=ripples.length-1;i>=0;i--){ const r=ripples[i]; r.radius += r.speed; r.life -= 0.02; if(r.type==='care') r.speed*=1.01; else r.speed*=1.015; if(r.life<=0) ripples.splice(i,1);
+        // apply local effect to nodes within band (expanding shock front)
+        for(const n of nodes){ const d=Math.hypot(n.x-r.x, n.y-r.y); const band = Math.abs(d - r.radius);
+          if(band<18){ if(r.type==='care'){ n.care = clamp(n.care + 0.12,0,1); n.health = clamp(n.health + 0.01,0,1); n.surveillance = clamp(n.surveillance - 0.02,0,1); }
+            else { n.police = clamp(n.police + 0.15,0,1); n.surveillance = clamp(n.surveillance + 0.03,0,1); n.health = clamp(n.health - 0.005,0,1); } }
+        }
+      }
+
+      forces();
+      ctx.clearRect(0,0,cv.width,cv.height);
+
+      // dramatic background vignette pulse with policing intensity
+      const bgPulse = 0.02*Math.sin(perfNow*0.002) * Params.policingIntensity;
+      ctx.fillStyle = `rgba(12,18,30,${0.15+bgPulse})`; ctx.fillRect(0,0,cv.width,cv.height);
+
+      // edges (fade edges from/into isolated nodes)
+      for(const e of edges){ const a=nodes[e.a], b=nodes[e.b]; const risk=Math.min(a.score,b.score); const iso = (a.isolated||b.isolated)?0.5:1; const alpha=lerp(190,40,risk)*iso; ctx.strokeStyle=`rgba(120,160,220,${alpha/255})`; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+
+      // node cores
+      for(const n of nodes){ const alive=n.score>=Params.deathThreshold; const core=Math.max(10,n.size*0.8); ctx.fillStyle= alive? 'rgba(130,190,255,0.95)' : 'rgba(200,210,220,0.95)'; ctx.beginPath(); ctx.arc(n.x,n.y,core/2,0,Math.PI*2); ctx.fill(); }
+
+      // glow & rings
+      ctx.globalCompositeOperation='lighter';
+      for(const n of nodes){ const base=18+36*Params.glow; const radius=base+n.size*1.2; const g=ctx.createRadialGradient(n.x,n.y,1,n.x,n.y,radius); const alive=n.score>=Params.deathThreshold; g.addColorStop(0, alive? 'rgba(142,203,255,0.40)' : 'rgba(192,202,216,0.40)'); g.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(n.x,n.y,radius,0,Math.PI*2); ctx.fill(); if(n.care>0.01){ ctx.strokeStyle=`rgba(126,255,195,0.85)`; ctx.lineWidth=1+6*n.care; const r=radius*0.7+12+12*Math.sin(perfNow/650); ctx.beginPath(); ctx.arc(n.x,n.y,Math.max(6,r),0,Math.PI*2); ctx.stroke(); } if(n.police>0.01){ ctx.strokeStyle=`rgba(255,107,107,0.85)`; ctx.lineWidth=1+6*n.police; const r=radius*0.65+10+12*Math.sin(perfNow/800+1.3); ctx.beginPath(); ctx.arc(n.x,n.y,Math.max(6,r),0,Math.PI*2); ctx.stroke(); } }
+      ctx.globalCompositeOperation='source-over';
+
+      // skull/marker overlays with pulse and tint from policing
+      for(const n of nodes){ if(n.score < Params.deathThreshold){ const overlaySize = Math.max(18, n.size*1.15); const tint = clamp(n.police*0.8,0,1); drawSkull(ctx, n.x, n.y, overlaySize, perfNow*0.01 + n.id*0.1, tint); } }
+
+      // ripples rendering
+      for(const r of ripples){ const alpha = clamp(r.life,0,1); ctx.strokeStyle = (r.type==='care')? `rgba(126,255,195,${0.7*alpha})` : `rgba(255,107,107,${0.7*alpha})`; ctx.lineWidth = 2 + 2*(1-alpha); ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, 0, Math.PI*2); ctx.stroke(); }
+
+      // witness mask
+      if(Params.witness){ ctx.fillStyle='rgba(11,15,23,0.75)'; ctx.fillRect(0,0,cv.width,cv.height); for(const n of nodes){ if(n.score<Params.deathThreshold){ ctx.save(); ctx.globalCompositeOperation='destination-out'; ctx.beginPath(); ctx.arc(n.x,n.y,140,0,Math.PI*2); ctx.fill(); ctx.restore(); } } }
+
+      // tooltip
+      const hover = pickNode(mouseX, mouseY);
+      if(hover>=0){ const n=nodes[hover]; tipEl.style.display='block'; tipEl.style.left=`${n.x}px`; tipEl.style.top=`${n.y}px`; tipEl.innerHTML=`ID: <b>${n.id}</b><br>Score: <b>${n.score.toFixed(2)}</b>${(n.score<Params.deathThreshold)?' · <span style="color:#ff6b6b">EXpendable</span>':''}`; } else { tipEl.style.display='none'; }
+
+      // counters
+      let alive=0, exp=0; for(const n of nodes){ if(n.score>=Params.deathThreshold) alive++; else exp++; }
+      countersEl.textContent = `Alive: ${alive}  —  Expendable: ${exp}`;
+
+      rafId=requestAnimationFrame(loop);
+    }
+
+    // ===== Interaction =====
+    let mouseX=0, mouseY=0, perfNow=0;
+    function pickNode(x,y){ let best=-1, md=1e9; for(const n of nodes){ const base=18+36*Params.glow; const r=base+n.size*1.2; const d=Math.hypot(n.x-x,n.y-y); if(d<r && d<md){ best=n.id; md=d; } } return best; }
+
+    cv.addEventListener('mousemove', e=>{ const rect=cv.getBoundingClientRect(); mouseX=(e.clientX-rect.left); mouseY=(e.clientY-rect.top); if(dragging>=0){ const n=nodes[dragging]; n.x=mouseX; n.y=mouseY; n.vx=0; n.vy=0; } });
+    cv.addEventListener('mousedown', e=>{ const idx=pickNode(mouseX,mouseY); if(idx>=0){ dragging=idx; const n=nodes[idx]; if(e.shiftKey){ n.police=clamp(n.police+0.24,0,1); ripples.push({type:'police', x:n.x, y:n.y, radius:8, speed:6, life:1}); } else { n.care=clamp(n.care+0.20,0,1); n.surveillance=clamp(n.surveillance-0.06,0,1); n.health=clamp(n.health+0.05,0,1); ripples.push({type:'care', x:n.x, y:n.y, radius:8, speed:5, life:1}); } } });
+    window.addEventListener('mouseup', ()=> dragging=-1);
+    window.addEventListener('keydown', e=>{ if(e.key==='r' || e.key==='R'){ build((Date.now()&0xffff)>>>0); } });
+
+    // ===== Controls & Presets =====
+    function byId(id){ return document.getElementById(id); }
+    function applyPresets(kind){
+      // core presets
+      if(kind==='abolition'){
+        Params.biasRacialization=0.10; Params.policingIntensity=0.05; Params.deathThreshold=0.22; Params.glow=1.10;
+      } else if(kind==='security'){
+        Params.biasRacialization=0.60; Params.policingIntensity=0.90; Params.deathThreshold=0.40; Params.glow=1.30;
+      } else if(kind==='austerity'){
+        Params.biasRacialization=0.45; Params.policingIntensity=0.50; Params.deathThreshold=0.50; Params.glow=1.00;
+      } else if(kind==='dataColony'){
+        // surveillance-heavy data colonialism
+        Params.biasRacialization=0.55; Params.policingIntensity=0.75; Params.deathThreshold=0.35; Params.glow=1.40;
+      } else if(kind==='platformMonarchy'){
+        // centralized platforms with soft control
+        Params.biasRacialization=0.20; Params.policingIntensity=0.30; Params.deathThreshold=0.25; Params.glow=1.50;
+      } else if(kind==='algoWelfare'){
+        // automated safety net
+        Params.biasRacialization=0.25; Params.policingIntensity=0.15; Params.deathThreshold=0.30; Params.glow=1.40;
+      } else if(kind==='cloudCommune'){
+        // post-work commune
+        Params.biasRacialization=0.00; Params.policingIntensity=0.05; Params.deathThreshold=0.15; Params.glow=1.70;
+      } else if(kind==='geofence'){
+        // psycho-geofenced control
+        Params.biasRacialization=0.10; Params.policingIntensity=0.80; Params.deathThreshold=0.50; Params.glow=1.20;
+      } else if(kind==='neofeudal'){
+        // extractive neofeudalism
+        Params.biasRacialization=0.65; Params.policingIntensity=0.85; Params.deathThreshold=0.60; Params.glow=0.80;
+      } else if(kind==='liberation'){
+        // abolitionist speculative freedom
+        Params.biasRacialization=0.05; Params.policingIntensity=0.05; Params.deathThreshold=0.10; Params.glow=1.80;
+      }
+      // sync sliders to reflect chosen preset
+      byId('biasR').value=Params.biasRacialization;
+      byId('policeI').value=Params.policingIntensity;
+      byId('deathT').value=Params.deathThreshold;
+      byId('glow').value=Params.glow;
+    }
+
+    function wireControls(){
+      byId('pop').oninput = e=>{ Params.population=+e.target.value; build(lastSeed); };
+      byId('biasR').oninput = e=>{ Params.biasRacialization=+e.target.value; };
+      byId('policeI').oninput = e=>{ Params.policingIntensity=+e.target.value; };
+      byId('deathT').oninput = e=>{ Params.deathThreshold=+e.target.value; };
+      byId('repul').oninput = e=>{ Params.repulsion=+e.target.value; };
+      byId('spring').oninput = e=>{ Params.spring=+e.target.value; };
+      byId('fric').oninput = e=>{ Params.friction=+e.target.value; };
+      byId('glow').oninput = e=>{ Params.glow=+e.target.value; };
+
+      byId('btnReseed').onclick = ()=> build((Date.now()&0xffff)>>>0);
+      byId('btnWitness').onclick = ()=>{ Params.witness=!Params.witness; byId('btnWitness').textContent = Params.witness? 'Witness: On' : 'Witness Mode'; };
+      byId('btnClearCare').onclick = ()=>{ for(const n of nodes){ n.care=0; n.police=0; } ripples.length=0; };
+      byId('btnPresets').onclick = ()=>{ byId('help').style.display='block'; };
+      byId('btnHelp').onclick = ()=>{ byId('help').style.display='block'; };
+      byId('helpClose').onclick = ()=>{ byId('help').style.display='none'; };
+
+      // preset buttons
+      byId('presetAbolition').onclick = ()=>{ applyPresets('abolition'); byId('help').style.display='none'; };
+      byId('presetSecurity').onclick = ()=>{ applyPresets('security'); byId('help').style.display='none'; };
+      byId('presetAusterity').onclick = ()=>{ applyPresets('austerity'); byId('help').style.display='none'; };
+      byId('presetDataColony').onclick = ()=>{ applyPresets('dataColony'); byId('help').style.display='none'; };
+      byId('presetPlatformMonarchy').onclick = ()=>{ applyPresets('platformMonarchy'); byId('help').style.display='none'; };
+      byId('presetAlgoWelfare').onclick = ()=>{ applyPresets('algoWelfare'); byId('help').style.display='none'; };
+      byId('presetCloudCommune').onclick = ()=>{ applyPresets('cloudCommune'); byId('help').style.display='none'; };
+      byId('presetGeofence').onclick = ()=>{ applyPresets('geofence'); byId('help').style.display='none'; };
+      byId('presetNeofeudal').onclick = ()=>{ applyPresets('neofeudal'); byId('help').style.display='none'; };
+      byId('presetLiberation').onclick = ()=>{ applyPresets('liberation'); byId('help').style.display='none'; };
+    }
+
+    // ===== Main Loop =====
+    function loop(ts){ perfNow=ts||performance.now(); draw(); }
+
+    // ===== Boot =====
+    const stage=document.getElementById('stage'); resize(); wireControls(); build(42); requestAnimationFrame(loop);
+    window.addEventListener('resize', ()=>{ cancelAnimationFrame(rafId); resize(); requestAnimationFrame(loop); });
+
+    // ===== Tests =====
+    function logTest(name, ok){ const el=document.getElementById('diag'); const div=document.createElement('div'); div.innerHTML=(ok?'<span class="pass">✔</span>':'<span class="fail">✖</span>')+' Test: '+name; el.appendChild(div); }
+    (function testCanvas(){ const ok = !!document.createElement('canvas').getContext('2d'); logTest('Canvas 2D context creatable', ok); })();
+    (function testPopulation(){ const prev=Params.population; Params.population=12; build(1); const ok = nodes.length===12; Params.population=prev; build(42); logTest('Population rebuilds node array', ok); })();
+    (function testPick(){ const ok = typeof (function(){ const s = pickNode(0,0); return typeof s === 'number'; })() === 'boolean' ? false : true; logTest('Hover picker returns number', ok); })();
+  </script>
+</body>
+</html>
